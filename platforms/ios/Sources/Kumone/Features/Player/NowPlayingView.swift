@@ -664,14 +664,7 @@ struct NowPlayingView: View {
     // MARK: - Views
 
     private func sourceName(_ source: String?) -> String {
-        switch source?.lowercased() {
-        case "wy", "netease", "163": return "网易云"
-        case "kw", "kuwo": return "酷我"
-        case "kg", "kugou": return "酷狗"
-        case "tx", "qq", "qqmusic": return "QQ音乐"
-        case "mg", "migu": return "咪咕"
-        default: return source?.isEmpty == false ? source! : "未知"
-        }
+        LXCatalogPlatform.displayName(for: source)
     }
 
     private func isPhoneLandscape(size: CGSize) -> Bool {

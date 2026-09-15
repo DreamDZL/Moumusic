@@ -207,13 +207,10 @@ public struct IOSMainWindow: View {
                 tabStack(.settings) { SettingsView() }
             }
 
-            // Use the native iOS search tab. This keeps the search field in
-            // the system tab-bar accessory instead of stacking a second
-            // custom field over the page while the bar is minimized.
-            Tab(value: .search, role: .search) {
+            // Keep a regular tab so iOS does not add the trailing search-tab
+            // exit X. SearchView still owns the native searchable field.
+            Tab("搜索", systemImage: "magnifyingglass", value: .search) {
                 tabStack(.search) { SearchView(query: "") }
-            } label: {
-                Label("搜索", systemImage: "magnifyingglass")
             }
         }
     }

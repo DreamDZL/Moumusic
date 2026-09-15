@@ -132,7 +132,7 @@ final class LXUserAPIService: ObservableObject {
         var failures: [String] = []
 
         for platform in sourceCandidates(for: track, action: "musicUrl") {
-            let platformName = LXCatalogPlatform(rawValue: platform)?.displayName ?? platform
+            let platformName = LXCatalogPlatform.displayName(for: platform)
             let requestTrack: Track
             if platform == primarySource {
                 requestTrack = track
@@ -197,7 +197,7 @@ final class LXUserAPIService: ObservableObject {
                                      detail: statusMessage)
         }
 
-        let platformOrder = ["wy", "kw", "kg", "tx", "mg"]
+        let platformOrder = ["wy", "kw", "kg", "tx", "mg", "sd"]
         let supportedPlatforms = platformOrder.filter {
             capabilities[$0]?.contains("musicUrl") == true
         }
@@ -212,7 +212,7 @@ final class LXUserAPIService: ObservableObject {
 
         var failures: [String] = []
         for platform in supportedPlatforms {
-            let platformName = LXCatalogPlatform(rawValue: platform)?.displayName ?? platform
+            let platformName = LXCatalogPlatform.displayName(for: platform)
             let track: Track
             if let current = PlayerService.shared.currentTrack, current.source == platform {
                 track = current
@@ -601,7 +601,7 @@ final class LXUserAPIService: ObservableObject {
         let primary = canonicalPlatform(track.source ?? track.sourceMetadata["source"]) ?? "wy"
         var values = [primary]
         if SettingsManager.shared.enableSourcePlatformFallback {
-            values.append(contentsOf: ["wy", "kw", "kg", "tx", "mg"])
+            values.append(contentsOf: ["wy", "kw", "kg", "tx", "mg", "sd"])
         }
         var seen = Set<String>()
         return values.filter { platform in
@@ -619,6 +619,7 @@ final class LXUserAPIService: ObservableObject {
         case "kg", "kugou": return "kg"
         case "tx", "qq", "qqmusic", "qq-music": return "tx"
         case "mg", "migu": return "mg"
+        case "sd", "soda", "sodamusic", "soda-music", "qishui", "qishui-music": return "sd"
         default: return value
         }
     }

@@ -179,13 +179,14 @@ struct Track: Codable, Hashable, Identifiable {
         case "kugou": normalized = "kg"
         case "qq", "qqmusic", "qq-music": normalized = "tx"
         case "migu": normalized = "mg"
+        case "sd", "soda", "sodamusic", "soda-music", "qishui", "qishui-music": normalized = "sd"
         default: normalized = rawSource.lowercased()
         }
         var copy = self
         copy.source = normalized
         var metadata = sourceMetadata
         switch normalized {
-        case "wy", "kw", "tx", "mg":
+        case "wy", "kw", "tx", "mg", "sd":
             metadata["songmid"] = metadata["songmid"] ?? String(id)
         default: break
         }

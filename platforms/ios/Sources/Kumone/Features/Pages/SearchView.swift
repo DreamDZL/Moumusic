@@ -102,8 +102,23 @@ final class SearchViewModel: ObservableObject {
 
     func loadHotKeywords() async {
         let requestedPlatform = platform
-        let keywords = (try? await LXCatalogService.hotKeywords(platform: requestedPlatform)) ?? []
+        var keywords = (try? await LXCatalogService.hotKeywords(platform: requestedPlatform)) ?? []
         guard requestedPlatform == platform else { return }
+
+        // Hot-word endpoints are not equally reliable across platforms. Keep
+        // the page useful with live catalogue names instead of leaving the
+        // hot-search section empty when one provider changes its endpoint.
+        if keywords.count < 6 {
+            let fallback: [String]
+            if requestedPlatform == .aggregate || requestedPlatform == .wy {
+                fallback = (try? await NeteaseAPI.hotSongs(limit: 12))?.map(\.name) ?? []
+            } else {
+                fallback = (try? await LXCatalogService.recommendedTracks(
+                    platform: requestedPlatform, limit: 12
+                ))?.map(\.name) ?? []
+            }
+            keywords.append(contentsOf: fallback)
+        }
 
         var seen = Set<String>()
         hotKeywords = keywords

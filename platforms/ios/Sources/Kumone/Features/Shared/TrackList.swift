@@ -226,14 +226,7 @@ struct TrackRow: View {
     }
 
     private var sourceName: String {
-        switch track.source?.lowercased() {
-        case "wy", "netease", "163": return "网易云"
-        case "kw", "kuwo": return "酷我"
-        case "kg", "kugou": return "酷狗"
-        case "tx", "qq", "qqmusic": return "QQ音乐"
-        case "mg", "migu": return "咪咕"
-        default: return track.source?.isEmpty == false ? track.source! : "未知"
-        }
+        LXCatalogPlatform.displayName(for: track.source ?? track.sourceMetadata["source"])
     }
 
     private var qualityName: String {

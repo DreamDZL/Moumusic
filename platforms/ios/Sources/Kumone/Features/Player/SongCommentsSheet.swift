@@ -106,14 +106,14 @@ struct SongCommentsSheet: View {
             let source = (track.source ?? track.sourceMetadata["source"] ?? "").lowercased()
             let sourceIsNetease = source.isEmpty || source == "wy" || source == "netease" || source == "163"
             if !sourceIsNetease {
-                metadataNotice = "当前歌曲来自 \(LXCatalogPlatform(rawValue: source)?.displayName ?? source)；优先显示该平台公开评论。"
+                metadataNotice = "当前歌曲来自 \(LXCatalogPlatform.displayName(for: source))；优先显示该平台公开评论。"
                 if let response = try? await LXCommentsService.comments(for: track) {
                     hotComments = uniqueComments(response.hot.map(DisplayComment.init))
                     latestComments = uniqueComments(response.latest.map(DisplayComment.init))
                     isLoading = false
                     return
                 }
-                metadataNotice = "当前歌曲来自 \(LXCatalogPlatform(rawValue: source)?.displayName ?? source)；该平台评论暂不可用，正在尝试公开元数据匹配。"
+                metadataNotice = "当前歌曲来自 \(LXCatalogPlatform.displayName(for: source))；该平台评论暂不可用，正在尝试公开元数据匹配。"
             }
 
             let neteaseID: Int?

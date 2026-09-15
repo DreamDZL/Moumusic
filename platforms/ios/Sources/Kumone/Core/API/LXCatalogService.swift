@@ -35,6 +35,24 @@ enum LXCatalogPlatform: String, CaseIterable, Identifiable {
         case .mg: return "mg"
         }
     }
+
+    /// User-provided LX sources may expose additional platforms that are not
+    /// part of the built-in catalogue adapters. Keep those names readable in
+    /// playback, comments, and source-health messages.
+    static func displayName(for rawValue: String?) -> String {
+        let value = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        switch value {
+        case "wy", "163", "netease", "neteasecloudmusic", "netease-cloud-music", "cloudmusic":
+            return "网易云"
+        case "kw", "kuwo": return "酷我"
+        case "kg", "kugou": return "酷狗"
+        case "tx", "qq", "qqmusic", "qq-music": return "QQ 音乐"
+        case "mg", "migu": return "咪咕"
+        case "sd", "soda", "sodamusic", "soda-music", "qishui", "qishui-music": return "汽水音乐"
+        case "": return "未知"
+        default: return rawValue ?? "未知"
+        }
+    }
 }
 
 enum LXCatalogError: LocalizedError {
