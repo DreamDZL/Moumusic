@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.16 - 2026-09-15
+
+### Fixed / Added
+
+- iOS: restore live hot-search suggestions with catalogue fallbacks.
+- iOS: remove the unwanted trailing search exit button while keeping the native searchable field.
+- iOS: recognize Soda Music source aliases (`sd`, `soda`, and `qishui`) for imported LX source playback, health checks, and display names.
+
 ## 1.0.15 - 2026-09-15
 
 ### Fixed / 修复
