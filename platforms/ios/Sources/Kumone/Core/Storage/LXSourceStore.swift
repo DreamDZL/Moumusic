@@ -121,6 +121,7 @@ final class LXSourceStore: ObservableObject {
     }
 
     enum ImportError: LocalizedError {
+        case readFailed
         case invalidEncoding
         case invalidScript
         case invalidURL
@@ -129,6 +130,7 @@ final class LXSourceStore: ObservableObject {
 
         var errorDescription: String? {
             switch self {
+            case .readFailed: return "无法读取所选文件，请先将文件下载到“文件”App后重试"
             case .invalidEncoding: return "无法读取音源文件，请选择 UTF-8 文本或 JSON 文件"
             case .invalidScript: return "这不是可识别的 LX User API 音源"
             case .invalidURL: return "请输入有效的 HTTP 或 HTTPS 音源链接"

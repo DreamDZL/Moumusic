@@ -29,21 +29,15 @@ struct LXSourceManagerView: View {
         }
         .fileImporter(
             isPresented: $isImportingFile,
-            allowedContentTypes: [
-                .plainText,
-                .json,
-                .sourceCode,
-                UTType(filenameExtension: "js") ?? .plainText,
-            ]
+            // LX sources are commonly exported as .js, .json, .txt, or a
+            // filename without an extension. UTType filtering hid valid
+            // files from the Files picker, so validate the contents after
+            // the user chooses a generic data item instead.
+            allowedContentTypes: [.data]
         ) { result in
             do {
                 let url = try result.get()
-                let accessed = url.startAccessingSecurityScopedResource()
-                defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-                try lxStore.importScript(
-                    Data(contentsOf: url),
-                    suggestedName: url.deletingPathExtension().lastPathComponent
-                )
+                try importSourceFile(at: url)
             } catch {
                 lxError = error.localizedDescription
             }
@@ -298,6 +292,40 @@ struct LXSourceManagerView: View {
                 Label("删除", systemImage: "trash")
             }
         }
+    }
+
+    private func importSourceFile(at url: URL) throws {
+        let accessed = url.startAccessingSecurityScopedResource()
+        defer {
+            if accessed { url.stopAccessingSecurityScopedResource() }
+        }
+
+        var coordinationError: NSError?
+        var data: Data?
+        NSFileCoordinator().coordinate(
+            readingItemAt: url,
+            options: [],
+            error: &coordinationError
+        ) { coordinatedURL in
+            data = try? Data(contentsOf: coordinatedURL, options: .mappedIfSafe)
+        }
+
+        // Some local providers do not participate in file coordination. A
+        // direct read is still valid while the security-scoped URL is open.
+        if data == nil {
+            data = try? Data(contentsOf: url, options: .mappedIfSafe)
+        }
+        guard let data else {
+            if let coordinationError {
+                throw coordinationError
+            }
+            throw LXSourceStore.ImportError.readFailed
+        }
+
+        try lxStore.importScript(
+            data,
+            suggestedName: url.deletingPathExtension().lastPathComponent
+        )
     }
 
     private var onlineImportSheet: some View {

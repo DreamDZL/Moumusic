@@ -320,7 +320,6 @@ struct SearchView: View {
     @StateObject private var model: SearchViewModel
     @StateObject private var history = SearchHistoryStore.shared
     @State private var searchText: String = ""
-    @FocusState private var searchFieldFocused: Bool
 
     init(query: String) {
         _model = StateObject(wrappedValue: SearchViewModel(query: query))
@@ -347,15 +346,30 @@ struct SearchView: View {
             }
             .padding(.top, 8)
         }
-        // Keep search inside this page so the iOS 26 search-tab dismiss (the
-        // large trailing X) cannot be confused with the keyboard dismiss
-        // action. The custom field still uses the native Liquid Glass API on
-        // iOS 26 and a material fallback on earlier systems.
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            searchBar
+        // iOS owns the search-tab accessory and its Liquid Glass placement.
+        // A second safe-area field here was being composited over the tab bar
+        // until the first scroll gesture caused a layout pass.
+        #if os(iOS)
+        .searchable(text: $searchText, prompt: "搜索歌曲、歌手、专辑、歌单")
+        .onSubmit(of: .search) {
+            submitSearchAfterInputMethodCommits()
         }
+        #endif
         .onChange(of: searchText) { newValue in
             model.setQuery(newValue)
+            #if os(iOS)
+            // Keep search responsive while allowing Chinese/third-party IMEs
+            // to finish composing before the request is sent.
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(400))
+                guard searchText == newValue else { return }
+                if newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    await model.loadHotKeywords()
+                } else {
+                    await model.load(tab: model.tab)
+                }
+            }
+            #endif
         }
         .navigationTitle(searchText.isEmpty ? "搜索" : searchText)
         .task(id: "\(model.tab.rawValue)-\(model.platform.rawValue)-\(searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)") {
@@ -374,7 +388,6 @@ struct SearchView: View {
         let query = (submittedText ?? searchText).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return }
         searchText = query
-        searchFieldFocused = false
         resignSearchInput()
         history.add(query)
         model.setQuery(query)
@@ -388,53 +401,6 @@ struct SearchView: View {
             await Task.yield()
             performSearch()
         }
-    }
-
-    private var searchBar: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.secondary)
-
-            TextField("搜索歌曲、歌手、专辑、歌单", text: $searchText)
-                .textFieldStyle(.plain)
-                .font(.body)
-                .focused($searchFieldFocused)
-                .submitLabel(.search)
-                .onSubmit {
-                    submitSearchAfterInputMethodCommits()
-                }
-
-            if !searchText.isEmpty {
-                Button {
-                    searchText = ""
-                    model.setQuery("")
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .frame(width: 44, height: 44)
-                .accessibilityLabel("清除搜索文字")
-            }
-
-            if searchFieldFocused {
-                Button("完成") {
-                    searchFieldFocused = false
-                    resignSearchInput()
-                }
-                .font(.subheadline.weight(.semibold))
-                .frame(minWidth: 44, minHeight: 44)
-                .accessibilityLabel("收起键盘")
-            }
-        }
-        .padding(.horizontal, 14)
-        .frame(minHeight: 56)
-        .frame(maxWidth: 720)
-        .compatGlass(interactive: true, in: Capsule())
-        .padding(.horizontal, Theme.Layout.contentInset)
-        .padding(.vertical, 8)
     }
 
     private var tabPicker: some View {

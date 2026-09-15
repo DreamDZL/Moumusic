@@ -207,11 +207,13 @@ public struct IOSMainWindow: View {
                 tabStack(.settings) { SettingsView() }
             }
 
-            // Use a regular tab: the system search role adds a trailing X
-            // whose action exits the search tab. SearchView owns its own
-            // glass field so the keyboard has an explicit “完成” action.
-            Tab("搜索", systemImage: "magnifyingglass", value: .search) {
+            // Use the native iOS search tab. This keeps the search field in
+            // the system tab-bar accessory instead of stacking a second
+            // custom field over the page while the bar is minimized.
+            Tab(value: .search, role: .search) {
                 tabStack(.search) { SearchView(query: "") }
+            } label: {
+                Label("搜索", systemImage: "magnifyingglass")
             }
         }
     }

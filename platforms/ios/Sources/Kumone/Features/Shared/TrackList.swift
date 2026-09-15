@@ -33,11 +33,19 @@ struct TrackRow: View {
     @State private var showAddToPlaylist = false
     #if os(iOS)
     @State private var showDownloadOptions = false
+    @ObservedObject private var lxStore = LXSourceStore.shared
     #endif
 
-    private var isCurrent: Bool { player.currentTrack?.id == track.id }
+    private var isCurrent: Bool { player.currentTrack?.playbackKey == track.playbackKey }
     private var isPlayable: Bool { playability == .playable }
     private var showsArtwork: Bool { style != .albumTrack }
+    private var showsVIPBadge: Bool {
+        #if os(iOS)
+        return lxStore.selectedSource == nil && track.fee == 1
+        #else
+        return track.fee == 1
+        #endif
+    }
 
     private var hidesLeadingIndex: Bool {
         #if os(iOS)
@@ -77,7 +85,7 @@ struct TrackRow: View {
                             .foregroundStyle(.tertiary)
                             .lineLimit(1)
                     }
-                    if track.fee == 1 {
+                    if showsVIPBadge {
                         VIPBadge()
                     }
                 }
@@ -482,6 +490,9 @@ struct TrackListView: View {
 
     @EnvironmentObject private var player: PlayerService
     @EnvironmentObject private var account: AccountStore
+    #if os(iOS)
+    @ObservedObject private var lxStore = LXSourceStore.shared
+    #endif
 
     var body: some View {
         VStack(spacing: 4) {
@@ -506,7 +517,7 @@ struct TrackListView: View {
             #endif
 
             LazyVStack(spacing: 1) {
-            ForEach(Array(tracks.enumerated()), id: \.element.id) { index, track in
+            ForEach(Array(tracks.enumerated()), id: \.element.playbackKey) { index, track in
                 TrackRow(
                     track: track,
                     index: style == .albumTrack ? (track.trackNo > 0 ? track.trackNo : index + 1) : index + 1,
@@ -533,6 +544,11 @@ struct TrackListView: View {
     }
 
     private func playability(of track: Track) -> TrackPlayability {
+        #if os(iOS)
+        // NetEase catalogue metadata can mark a track as VIP-only even when
+        // the selected LX source can resolve its public playback URL.
+        if lxStore.selectedSource != nil { return .playable }
+        #endif
         // With unblock enabled, gray tracks resolve from third-party sources.
         if SettingsManager.shared.enableUnblock { return .playable }
         return track.playability(
