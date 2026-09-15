@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.15 - 2026-09-15
+
+### Fixed / 修复
+
+- iOS: use the native iOS search tab and searchable field to prevent the search bar from being layered over the page; add debounced input for third-party keyboards.
+- iOS：使用 iOS 原生搜索 Tab 和搜索框，修复搜索框叠加在页面上的问题，并兼容第三方输入法防抖搜索。
+- iOS: allow LX source files with arbitrary extensions and read Files-provider URLs through a security-scoped, coordinated import.
+- iOS：允许导入任意扩展名的 LX 音源文件，并通过安全作用域和文件协调读取 Files 文件。
+- iOS: when an LX source is selected, do not block NetEase catalogue tracks because of catalogue-only VIP metadata; keep playback routed through LX.
+- iOS：选中 LX 音源后，不再因网易云目录的 VIP 元数据错误拦截歌曲，播放仍统一通过 LX 音源解析。
+- iOS: use source-aware playback keys in result lists to prevent same-ID tracks from different platforms colliding.
+- iOS：搜索结果列表使用带音源的平台播放标识，避免不同平台相同 ID 的歌曲互相覆盖。
+
 ## 1.0.0 - 2026-09-01
 
 ### Added
