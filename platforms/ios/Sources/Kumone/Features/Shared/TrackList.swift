@@ -268,7 +268,7 @@ struct TrackRow: View {
             showAddToPlaylist = true
         }
         if onRemoved != nil {
-            Button("从本地歌单中删除", role: .destructive) {
+            Button("从歌单中删除", role: .destructive) {
                 onRemoved?()
                 ToastCenter.shared.show(String(localized: "已从歌单中删除"))
             }
@@ -558,8 +558,12 @@ struct AddToPlaylistSheet: View {
     let track: Track
 
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var account: AccountStore
     @StateObject private var localStore = LocalPlaylistStore.shared
+    @StateObject private var qqMusic = QQMusicAPI.shared
     @State private var newName = ""
+    @State private var isAddingOnline = false
+    @State private var errorMessage: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -594,8 +598,44 @@ struct AddToPlaylistSheet: View {
                         }
                     }
 
-                }
-                .padding(8)
+                    if account.isLoggedIn && !account.createdPlaylists.isEmpty {
+                        Text("网易云音乐")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 10)
+                            .padding(.top, 10)
+                        ForEach(account.createdPlaylists) { playlist in
+                            Button {
+                                addToNetease(playlist)
+                            } label: {
+                                playlistRow(name: playlist.name, count: playlist.trackCount,
+                                            coverURL: playlist.coverURL)
+                            }
+                            .buttonStyle(.interactiveRow)
+                            .disabled(isAddingOnline)
+                        }
+                    }
+
+                    if qqMusic.isLoggedIn && !qqMusic.playlists.isEmpty {
+                        Text("QQ 音乐")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 10)
+                            .padding(.top, 10)
+                        ForEach(qqMusic.playlists.filter { !$0.isLiked }) { playlist in
+                            Button {
+                                addToQQ(playlist)
+                            } label: {
+                                playlistRow(name: playlist.name, count: playlist.trackCount,
+                                            coverURL: playlist.coverURL)
+                            }
+                            .buttonStyle(.interactiveRow)
+                            .disabled(isAddingOnline)
+                        }
+                    }
+
+            }
+            .padding(8)
             }
             .frame(height: 300)
             Divider().opacity(0.4)
@@ -610,6 +650,9 @@ struct AddToPlaylistSheet: View {
             .padding(12)
         }
         .frame(width: 340)
+        .alert("添加失败", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+            Button("确定", role: .cancel) { errorMessage = nil }
+        } message: { Text(errorMessage ?? "") }
     }
 
     private func playlistRow(name: String, count: Int, coverURL: String?) -> some View {
@@ -644,6 +687,42 @@ struct AddToPlaylistSheet: View {
     private func add(to playlist: LocalPlaylist) {
         localStore.add(track, to: playlist.id)
         dismiss()
+    }
+
+    private func addToNetease(_ playlist: PlaylistSummary) {
+        isAddingOnline = true
+        Task {
+            do {
+                let source = track.source ?? track.sourceMetadata["source"]
+                let target = source == "wy" ? track : await LXCatalogService.matchingTrack(track, on: "wy")
+                guard let target else { throw NeteaseAPIError.business(code: -1, message: "网易云中找不到对应歌曲") }
+                try await NeteaseAPI.playlistTracks(op: "add", playlistID: playlist.id, trackIDs: [target.id])
+                ToastCenter.shared.show("已添加到「\(playlist.name)」")
+                isAddingOnline = false
+                dismiss()
+            } catch {
+                isAddingOnline = false
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func addToQQ(_ playlist: QQMusicAPI.Playlist) {
+        isAddingOnline = true
+        Task {
+            do {
+                let source = track.source ?? track.sourceMetadata["source"]
+                let target = source == "tx" ? track : await LXCatalogService.matchingTrack(track, on: "tx")
+                guard let target else { throw QQMusicAPI.QQMusicError.invalidResponse }
+                try await qqMusic.add(target, to: playlist)
+                ToastCenter.shared.show("已添加到「\(playlist.name)」")
+                isAddingOnline = false
+                dismiss()
+            } catch {
+                isAddingOnline = false
+                errorMessage = error.localizedDescription
+            }
+        }
     }
 
     private func createLocalAndAdd() {

@@ -3,12 +3,109 @@ import UniformTypeIdentifiers
 
 struct LocalPlaylistsView: View {
     @StateObject private var store = LocalPlaylistStore.shared
+    @EnvironmentObject private var account: AccountStore
+    @StateObject private var qqMusic = QQMusicAPI.shared
+    @Environment(\.openLogin) private var openLogin
     @State private var showImport = false
+    @State private var showQQLogin = false
+    @State private var showQQWebLogin = false
     @State private var showCreate = false
     @State private var newName = ""
 
     var body: some View {
         ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                onlinePlaylistsSection
+                qqPlaylistsSection
+
+                localPlaylistsSection
+            }
+            .padding(.vertical, 14)
+            PlayerClearanceSpacer()
+        }
+        .navigationTitle("歌单")
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button {
+                    showImport = true
+                } label: {
+                    Label("导入歌单", systemImage: "square.and.arrow.down")
+                }
+                Button {
+                    showCreate = true
+                } label: {
+                    Label("新建歌单", systemImage: "plus")
+                }
+            }
+        }
+        .task {
+            if !account.isBootstrapped { await account.bootstrap() }
+        }
+        .refreshable {
+            await account.refreshLibrary()
+        }
+        .sheet(isPresented: $showImport) {
+            ImportPlaylistSheet()
+        }
+        .alert("新建本地歌单", isPresented: $showCreate) {
+            TextField("歌单名称", text: $newName)
+            Button("创建") {
+                _ = store.create(name: newName)
+                newName = ""
+            }
+            Button("取消", role: .cancel) { newName = "" }
+        }
+    }
+
+    private var onlinePlaylistsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("网易云音乐")
+                    .font(.title3.weight(.bold))
+                Spacer()
+                if account.isLoggedIn {
+                    Button {
+                        Task { await account.refreshLibrary() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                }
+            }
+
+            if !account.isLoggedIn {
+                VStack(spacing: 10) {
+                    Text("登录后查看和管理网易云个人歌单")
+                        .foregroundStyle(.secondary)
+                    Button("登录网易云音乐", action: openLogin)
+                        .buttonStyle(.borderedProminent)
+                }
+                .frame(maxWidth: .infinity, minHeight: 120)
+                .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 16))
+            } else if account.userPlaylists.isEmpty {
+                Text("暂无在线歌单")
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 80)
+            } else {
+                LazyVStack(spacing: 10) {
+                    ForEach(account.userPlaylists) { playlist in
+                        NavigationLink(value: Destination.playlist(playlist.id)) {
+                            playlistRow(playlist)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, Theme.Layout.contentInset)
+    }
+
+    private var localPlaylistsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("本地歌单")
+                .font(.title3.weight(.bold))
+
             if store.playlists.isEmpty {
                 VStack(spacing: 14) {
                     EmptyStateView(
@@ -24,8 +121,7 @@ struct LocalPlaylistsView: View {
                     .buttonStyle(.borderedProminent)
                     .frame(minHeight: 44)
                 }
-                .frame(maxWidth: .infinity, minHeight: 460)
-                .padding(.horizontal, Theme.Layout.contentInset)
+                .frame(maxWidth: .infinity, minHeight: 260)
             } else {
                 LazyVStack(spacing: 10) {
                     ForEach(store.playlists) { playlist in
@@ -50,37 +146,62 @@ struct LocalPlaylistsView: View {
                         }
                     }
                 }
-                .padding(.horizontal, Theme.Layout.contentInset)
-                .padding(.top, 14)
             }
-            PlayerClearanceSpacer()
         }
-        .navigationTitle("本地歌单")
-        .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                Button {
-                    showImport = true
-                } label: {
-                    Label("导入歌单", systemImage: "square.and.arrow.down")
+        .padding(.horizontal, Theme.Layout.contentInset)
+    }
+
+    private var qqPlaylistsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("QQ音乐")
+                    .font(.title3.weight(.bold))
+                Spacer()
+                if qqMusic.isLoggedIn {
+                    Button {
+                        Task { try? await qqMusic.refreshPlaylists() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
                 }
-                Button {
-                    showCreate = true
-                } label: {
-                    Label("新建歌单", systemImage: "plus")
+            }
+            if !qqMusic.isLoggedIn {
+                VStack(spacing: 10) {
+                    Text("登录后查看和管理 QQ 音乐个人歌单")
+                        .foregroundStyle(.secondary)
+                    HStack(spacing: 10) {
+                        Button("QQ 音乐登录") { showQQWebLogin = true }
+                            .buttonStyle(.borderedProminent)
+                        Button("手动导入 Cookie") { showQQLogin = true }
+                            .buttonStyle(.bordered)
+                    }
+                        .buttonStyle(.borderedProminent)
+                }
+                .frame(maxWidth: .infinity, minHeight: 120)
+                .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 16))
+            } else if qqMusic.playlists.isEmpty {
+                Text("暂无 QQ 音乐在线歌单")
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 80)
+            } else {
+                LazyVStack(spacing: 10) {
+                    ForEach(qqMusic.playlists) { playlist in
+                        NavigationLink(value: Destination.qqPlaylist(playlist)) {
+                            playlistRow(playlist)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             }
         }
-        .sheet(isPresented: $showImport) {
-            ImportPlaylistSheet()
+        .padding(.horizontal, Theme.Layout.contentInset)
+        .task {
+            if qqMusic.isLoggedIn { try? await qqMusic.refreshPlaylists() }
         }
-        .alert("新建本地歌单", isPresented: $showCreate) {
-            TextField("歌单名称", text: $newName)
-            Button("创建") {
-                _ = store.create(name: newName)
-                newName = ""
-            }
-            Button("取消", role: .cancel) { newName = "" }
-        }
+        .sheet(isPresented: $showQQLogin) { QQCookieSheet() }
+        .sheet(isPresented: $showQQWebLogin) { QQLoginSheet() }
     }
 
     private func playlistRow(_ playlist: LocalPlaylist) -> some View {
@@ -115,6 +236,108 @@ struct LocalPlaylistsView: View {
         .padding(12)
         .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .contentShape(Rectangle())
+    }
+
+    private func playlistRow(_ playlist: PlaylistSummary) -> some View {
+        HStack(spacing: 12) {
+            CachedAsyncImage(url: playlist.coverURL?.resizedImageURL(160), animated: false)
+                .frame(width: 68, height: 68)
+                .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(playlist.name)
+                    .font(.headline)
+                    .lineLimit(2)
+                Text("\(playlist.trackCount) 首")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(12)
+        .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .contentShape(Rectangle())
+    }
+
+    private func playlistRow(_ playlist: QQMusicAPI.Playlist) -> some View {
+        HStack(spacing: 12) {
+            CachedAsyncImage(url: playlist.coverURL?.resizedImageURL(160), animated: false)
+                .frame(width: 68, height: 68)
+                .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            VStack(alignment: .leading, spacing: 5) {
+                Text(playlist.name).font(.headline).lineLimit(2)
+                Text("\(playlist.trackCount) 首").font(.subheadline).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+        }
+        .padding(12)
+        .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .contentShape(Rectangle())
+    }
+}
+
+private struct QQCookieSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var qqMusic = QQMusicAPI.shared
+    @State private var cookie = ""
+    @State private var isSaving = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("QQ 音乐 Cookie") {
+                    SecureField("粘贴 Cookie", text: $cookie)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                }
+                Section {
+                    Button {
+                        isSaving = true
+                        qqMusic.setCookie(cookie)
+                        Task {
+                            do {
+                                try await qqMusic.refreshPlaylists()
+                                isSaving = false
+                                dismiss()
+                            } catch {
+                                isSaving = false
+                                errorMessage = error.localizedDescription
+                            }
+                        }
+                    } label: {
+                        HStack {
+                            Text(isSaving ? "正在验证…" : "保存并验证")
+                            Spacer()
+                            if isSaving { ProgressView() }
+                        }
+                    }
+                    .disabled(isSaving || cookie.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Button("退出 QQ 音乐", role: .destructive) {
+                        qqMusic.logout()
+                        dismiss()
+                    }
+                }
+                Section("安全说明") {
+                    Text("Cookie 仅保存在本机 Keychain，用于访问你的 QQ 音乐歌单。不要把 Cookie 分享给他人。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .navigationTitle("QQ 音乐账号")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
+            }
+            .alert("验证失败", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+                Button("确定", role: .cancel) { errorMessage = nil }
+            } message: { Text(errorMessage ?? "") }
+        }
     }
 }
 
@@ -331,5 +554,72 @@ struct LocalPlaylistDetailView: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, Theme.Layout.contentInset)
+    }
+}
+
+struct QQPlaylistDetailView: View {
+    let playlist: QQMusicAPI.Playlist
+    @StateObject private var qqMusic = QQMusicAPI.shared
+    @State private var tracks: [Track] = []
+    @State private var isLoading = true
+    @State private var errorMessage: String?
+    @EnvironmentObject private var player: PlayerService
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(playlist.name).font(.title3.weight(.bold))
+                        Text("QQ 音乐 · \(tracks.count) 首").font(.subheadline).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button {
+                        player.play(tracks: tracks, source: .playlist(playlist.id), context: .playlist(id: playlist.id, name: playlist.name))
+                    } label: {
+                        Image(systemName: "play.fill").frame(width: 40, height: 40)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(tracks.isEmpty)
+                }
+                .padding(.horizontal, Theme.Layout.contentInset)
+
+                if isLoading {
+                    ProgressView().frame(maxWidth: .infinity, minHeight: 260)
+                } else if let errorMessage {
+                    ErrorStateView(message: errorMessage) { Task { await load() } }
+                        .frame(minHeight: 260)
+                } else {
+                    TrackListView(
+                        tracks: tracks,
+                        source: .playlist(playlist.id),
+                        context: .playlist(id: playlist.id, name: playlist.name),
+                        onRemoved: { track in
+                            Task {
+                                guard let index = tracks.firstIndex(where: { $0.playbackKey == track.playbackKey }) else { return }
+                                do {
+                                    try await qqMusic.remove(track, from: playlist)
+                                    tracks.remove(at: index)
+                                } catch { errorMessage = error.localizedDescription }
+                            }
+                        }
+                    )
+                    .padding(.horizontal, Theme.Layout.contentInset - 10)
+                }
+                PlayerClearanceSpacer()
+            }
+            .padding(.vertical, 14)
+        }
+        .navigationTitle(playlist.name)
+        .task { await load() }
+    }
+
+    private func load() async {
+        isLoading = tracks.isEmpty
+        do {
+            tracks = try await qqMusic.detail(playlist).tracks
+            errorMessage = nil
+        } catch { errorMessage = error.localizedDescription }
+        isLoading = false
     }
 }

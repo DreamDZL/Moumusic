@@ -56,6 +56,7 @@ enum SidebarItem: Hashable {
     case collections
     case cloud
     case playlist(Int)
+    case qqPlaylist(QQMusicAPI.Playlist)
 }
 
 enum Destination: Hashable {
@@ -84,6 +85,8 @@ struct DestinationsModifier: ViewModifier {
                 switch destination {
                 case .playlist(let id):
                     PlaylistDetailView(playlistID: id)
+                case .qqPlaylist(let playlist):
+                    QQPlaylistDetailView(playlist: playlist)
                 case .lxPlaylist(let source, let id):
                     LXPlaylistDetailView(source: source, playlistID: id)
                 case .album(let id):

@@ -803,7 +803,7 @@ enum LXCatalogService {
         return digest.map { String(format: "%02x", $0) }.joined()
     }
 
-    private static func zzcSign(_ data: Data) -> String? {
+    static func zzcSign(_ data: Data) -> String? {
         var digest = [UInt8](repeating: 0, count: Int(CC_SHA1_DIGEST_LENGTH))
         data.withUnsafeBytes { buffer in
             _ = CC_SHA1(buffer.baseAddress, CC_LONG(data.count), &digest)

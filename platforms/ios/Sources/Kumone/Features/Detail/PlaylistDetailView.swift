@@ -60,7 +60,8 @@ final class PlaylistDetailViewModel: ObservableObject {
         }
     }
 
-    func remove(_ track: Track) {
+    func remove(_ track: Track) async throws {
+        try await NeteaseAPI.playlistTracks(op: "del", playlistID: playlistID, trackIDs: [track.id])
         tracks.removeAll { $0.id == track.id }
     }
 }
@@ -113,7 +114,15 @@ struct PlaylistDetailView: View {
                         source: .playlist(playlistID),
                         context: model.detail.map { .playlist(id: playlistID, name: $0.name) },
                         removableFromPlaylistID: isOwnPlaylist ? playlistID : nil,
-                        onRemoved: { model.remove($0) }
+                        onRemoved: { track in
+                            Task {
+                                do {
+                                    try await model.remove(track)
+                                } catch {
+                                    ToastCenter.shared.show(error.localizedDescription)
+                                }
+                            }
+                        }
                     )
                     .padding(.horizontal, isCompact ? 6 : Theme.Layout.contentInset - 10)
 

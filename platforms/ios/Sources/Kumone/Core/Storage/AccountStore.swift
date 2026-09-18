@@ -1,10 +1,5 @@
 import Foundation
 
-/// Compatibility shell for views shared with the desktop target.
-///
-/// Moumusic iOS no longer exposes or calls a provider account. Keeping this
-/// small in-memory shell avoids breaking shared player views while ensuring
-/// an old cookie can never trigger a NetEase request.
 @MainActor
 final class AccountStore: ObservableObject {
     static let shared = AccountStore()
@@ -16,8 +11,8 @@ final class AccountStore: ObservableObject {
     @Published var likedArtists: [ArtistSummary] = []
     @Published var isBootstrapped = false
 
-    var isLoggedIn: Bool { false }
-    var hasAuthCookie: Bool { false }
+    var isLoggedIn: Bool { NeteaseClient.shared.isLoggedIn && profile != nil }
+    var hasAuthCookie: Bool { NeteaseClient.shared.isLoggedIn }
     var vipType: Int { profile?.vipType ?? 0 }
 
     var likedSongsPlaylist: PlaylistSummary? {
@@ -36,19 +31,40 @@ final class AccountStore: ObservableObject {
 
     private init() {}
 
-    /// Kept for shared desktop call sites; it intentionally performs no
-    /// network work on any platform.
     func bootstrap() async {
+        guard NeteaseClient.shared.isLoggedIn else {
+            isBootstrapped = true
+            return
+        }
+
+        do {
+            profile = try await NeteaseAPI.userAccount()
+            if let userID = profile?.userId {
+                async let playlists = NeteaseAPI.userPlaylists(uid: userID)
+                async let liked = NeteaseAPI.likedTrackIDs(uid: userID)
+                userPlaylists = try await playlists
+                likedTrackIDs = Set(try await liked)
+            }
+        } catch {
+            profile = nil
+            userPlaylists = []
+            likedTrackIDs = []
+        }
         isBootstrapped = true
     }
 
     func refreshLibrary() async {
-        // Provider library removed. Local playlists are managed by
-        // LocalPlaylistStore instead.
+        guard let userID = profile?.userId else { return }
+        do {
+            userPlaylists = try await NeteaseAPI.userPlaylists(uid: userID)
+            likedTrackIDs = Set(try await NeteaseAPI.likedTrackIDs(uid: userID))
+        } catch {
+            ToastCenter.shared.show(error.localizedDescription)
+        }
     }
 
     func refreshSublists() async {
-        // Provider library removed.
+        await refreshLibrary()
     }
 
     func isLiked(_ trackID: Int) -> Bool {
@@ -56,16 +72,23 @@ final class AccountStore: ObservableObject {
     }
 
     func toggleLike(trackID: Int) async {
-        _ = trackID
-        ToastCenter.shared.show("账号收藏已移除，请使用本地歌单")
+        let liked = likedTrackIDs.contains(trackID)
+        do {
+            try await NeteaseAPI.likeTrack(id: trackID, like: !liked)
+            if liked { likedTrackIDs.remove(trackID) } else { likedTrackIDs.insert(trackID) }
+        } catch {
+            ToastCenter.shared.show(error.localizedDescription)
+        }
     }
 
     func logout() async {
+        await NeteaseAPI.logout()
         profile = nil
         likedTrackIDs = []
         userPlaylists = []
         likedAlbums = []
         likedArtists = []
+        isBootstrapped = true
     }
 
 }
