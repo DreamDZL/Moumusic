@@ -69,12 +69,12 @@ jobs:
       - name: Package unsigned IPA
         run: |
           set -euo pipefail
-          app_path="$RUNNER_TEMP/Music.xcarchive/Products/Applications/KumoneIOS.app"
+          app_path="$(find "$RUNNER_TEMP/Music.xcarchive/Products/Applications" -maxdepth 1 -type d -name '*.app' -print -quit)"
           test -d "$app_path"
           mkdir -p "$RUNNER_TEMP/Music-ipa/Payload"
           cp -R "$app_path" "$RUNNER_TEMP/Music-ipa/Payload/"
 
-          app_bundle="$RUNNER_TEMP/Music-ipa/Payload/KumoneIOS.app"
+          app_bundle="$RUNNER_TEMP/Music-ipa/Payload/$(basename "$app_path")"
           bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app_bundle/Info.plist")
           test "$bundle_id" = "com.jiajia2222.moumusic.ios"
           test -d "$app_bundle/PlugIns/MoumusicWidget.appex"
