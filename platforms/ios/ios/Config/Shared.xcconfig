@@ -10,7 +10,9 @@ PRODUCT_NAME = MoumusicIOS
 PRODUCT_BUNDLE_IDENTIFIER = com.jiajia2222.moumusic.ios
 // PRODUCT_DISPLAY_NAME is not a real build setting; the Home Screen
 // name comes from CFBundleDisplayName.
-INFOPLIST_KEY_CFBundleDisplayName = Moumusic
+// Localized by KumoneIOS/{zh-Hans,en}.lproj/InfoPlist.strings.
+// This is the fallback for languages without a dedicated translation.
+INFOPLIST_KEY_CFBundleDisplayName = Music
 INFOPLIST_KEY_CFBundleDevelopmentRegion = zh-Hans
 // Keep local/Xcode builds on the current public release. CI overrides this
 // with the version from the v* tag and verifies the final app bundle.

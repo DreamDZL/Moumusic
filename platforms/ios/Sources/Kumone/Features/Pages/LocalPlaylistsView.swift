@@ -11,6 +11,7 @@ struct LocalPlaylistsView: View {
     @State private var showQQWebLogin = false
     @State private var showCreate = false
     @State private var newName = ""
+    @State private var onlineErrorMessage: String?
 
     var body: some View {
         ScrollView {
@@ -42,7 +43,7 @@ struct LocalPlaylistsView: View {
             if !account.isBootstrapped { await account.bootstrap() }
         }
         .refreshable {
-            await account.refreshLibrary()
+            await refreshOnlinePlaylists()
         }
         .sheet(isPresented: $showImport) {
             ImportPlaylistSheet()
@@ -55,6 +56,14 @@ struct LocalPlaylistsView: View {
             }
             Button("取消", role: .cancel) { newName = "" }
         }
+        .alert("在线歌单刷新失败", isPresented: Binding(
+            get: { onlineErrorMessage != nil },
+            set: { if !$0 { onlineErrorMessage = nil } }
+        )) {
+            Button("确定", role: .cancel) { onlineErrorMessage = nil }
+        } message: {
+            Text(onlineErrorMessage ?? "")
+        }
     }
 
     private var onlinePlaylistsSection: some View {
@@ -65,7 +74,9 @@ struct LocalPlaylistsView: View {
                 Spacer()
                 if account.isLoggedIn {
                     Button {
-                        Task { await account.refreshLibrary() }
+                        Task {
+                            await refreshOnlinePlaylists()
+                        }
                     } label: {
                         Image(systemName: "arrow.clockwise")
                     }
@@ -159,7 +170,13 @@ struct LocalPlaylistsView: View {
                 Spacer()
                 if qqMusic.isLoggedIn {
                     Button {
-                        Task { try? await qqMusic.refreshPlaylists() }
+                        Task {
+                            do {
+                                try await qqMusic.refreshPlaylists()
+                            } catch {
+                                onlineErrorMessage = error.localizedDescription
+                            }
+                        }
                     } label: {
                         Image(systemName: "arrow.clockwise")
                     }
@@ -198,10 +215,26 @@ struct LocalPlaylistsView: View {
         }
         .padding(.horizontal, Theme.Layout.contentInset)
         .task {
-            if qqMusic.isLoggedIn { try? await qqMusic.refreshPlaylists() }
+            if qqMusic.isLoggedIn {
+                do {
+                    try await qqMusic.refreshPlaylists()
+                } catch {
+                    onlineErrorMessage = error.localizedDescription
+                }
+            }
         }
         .sheet(isPresented: $showQQLogin) { QQCookieSheet() }
         .sheet(isPresented: $showQQWebLogin) { QQLoginSheet() }
+    }
+
+    private func refreshOnlinePlaylists() async {
+        await account.refreshLibrary()
+        guard qqMusic.isLoggedIn else { return }
+        do {
+            try await qqMusic.refreshPlaylists()
+        } catch {
+            onlineErrorMessage = error.localizedDescription
+        }
     }
 
     private func playlistRow(_ playlist: LocalPlaylist) -> some View {
@@ -589,6 +622,13 @@ struct QQPlaylistDetailView: View {
                 } else if let errorMessage {
                     ErrorStateView(message: errorMessage) { Task { await load() } }
                         .frame(minHeight: 260)
+                } else if tracks.isEmpty {
+                    EmptyStateView(
+                        icon: "music.note.list",
+                        title: "歌单还是空的",
+                        subtitle: "可以在歌曲菜单中选择“收藏到歌单”添加歌曲"
+                    )
+                    .frame(maxWidth: .infinity, minHeight: 260)
                 } else {
                     TrackListView(
                         tracks: tracks,

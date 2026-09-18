@@ -50,3 +50,45 @@ jobs:
             -derivedDataPath test-build \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO
+
+      - name: Archive unsigned iOS app
+        run: |
+          set -euo pipefail
+          xcodebuild archive \
+            -project KumoneIOS.xcodeproj \
+            -scheme KumoneIOS \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/Music.xcarchive" \
+            -derivedDataPath "$RUNNER_TEMP/music-derived-data" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_STYLE=Manual
+
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+          app_path="$RUNNER_TEMP/Music.xcarchive/Products/Applications/KumoneIOS.app"
+          test -d "$app_path"
+          mkdir -p "$RUNNER_TEMP/Music-ipa/Payload"
+          cp -R "$app_path" "$RUNNER_TEMP/Music-ipa/Payload/"
+
+          app_bundle="$RUNNER_TEMP/Music-ipa/Payload/KumoneIOS.app"
+          bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app_bundle/Info.plist")
+          test "$bundle_id" = "com.jiajia2222.moumusic.ios"
+          test -d "$app_bundle/PlugIns/MoumusicWidget.appex"
+          test -f "$app_bundle/zh-Hans.lproj/InfoPlist.strings"
+          test -f "$app_bundle/en.lproj/InfoPlist.strings"
+
+          ditto -c -k --sequesterRsrc --keepParent \
+            "$RUNNER_TEMP/Music-ipa" "$GITHUB_WORKSPACE/Music-ios-unsigned.ipa"
+          unzip -l "$GITHUB_WORKSPACE/Music-ios-unsigned.ipa"
+          test -s "$GITHUB_WORKSPACE/Music-ios-unsigned.ipa"
+
+      - name: Upload unsigned IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Music-ios-unsigned
+          path: Music-ios-unsigned.ipa
+          if-no-files-found: error
