@@ -22,6 +22,7 @@ public struct IOSMainWindow: View {
     @State private var searchPath = NavigationPath()
     @State private var playlistsPath = NavigationPath()
     @State private var settingsPath = NavigationPath()
+    @State private var showLogin = false
 
     public init() {}
 
@@ -33,9 +34,10 @@ public struct IOSMainWindow: View {
             .environmentObject(toasts)
             .tint(Theme.accent)
             .preferredColorScheme(settings.appearance.colorScheme)
-            // iOS is source-only: no provider account or built-in catalogue
-            // session is started from the app shell.
-            .environment(\.openLogin, {})
+            // The iOS playlist surface uses the same NetEase account sheet as
+            // the desktop shell.  Keep the action at this root so a button in
+            // a pushed playlist page can present the sheet as well.
+            .environment(\.openLogin, { showLogin = true })
             .task {
                 // Let the first scene commit before touching AVAudioSession,
                 // MPRemoteCommandCenter, persisted playback state, or a user
@@ -49,6 +51,9 @@ public struct IOSMainWindow: View {
             }
             .sheet(isPresented: $updater.showSheet) {
                 IOSUpdaterSheet()
+            }
+            .sheet(isPresented: $showLogin) {
+                LoginSheet()
             }
             .overlay(alignment: .top) {
                 if let toast = toasts.current {

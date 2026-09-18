@@ -73,7 +73,15 @@ private struct QQWebView: UIViewRepresentable {
     let onReady: (WKWebView) -> Void
 
     func makeUIView(context: Context) -> WKWebView {
-        let view = WKWebView(frame: .zero)
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .default()
+        let view = WKWebView(frame: .zero, configuration: configuration)
+
+        // QQ Music serves a mobile login page to iPhone user agents.  That
+        // page expects the QQ Music app to pull the login state and does not
+        // expose the desktop QR flow.  Use a desktop Safari user agent so the
+        // web login presents the computer-style QR code instead.
+        view.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15"
         view.load(URLRequest(url: URL(string: "https://y.qq.com/n/ryqq/login")!))
         DispatchQueue.main.async { onReady(view) }
         return view
