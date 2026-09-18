@@ -61,6 +61,7 @@ enum SidebarItem: Hashable {
 
 enum Destination: Hashable {
     case playlist(Int)
+    case qqPlaylist(QQMusicAPI.Playlist)
     case lxPlaylist(source: LXCatalogPlatform, id: String)
     case album(Int)
     case lxAlbum(source: LXCatalogPlatform, id: String?, name: String,
