@@ -204,10 +204,17 @@ final class QQMusicAPI: ObservableObject {
             return ArtistRef(id: int(singer["id"]) ?? 0, name: name)
         }
         let album = row["album"] as? [String: Any]
+        let albumMid = (album?["mid"] as? String)
+            ?? (album?["pmid"] as? String)
+            ?? (row["albummid"] as? String)
+        let coverURL = albumMid.flatMap { mid -> String? in
+            guard !mid.isEmpty else { return nil }
+            return "https://y.gtimg.cn/music/photo_new/T002R300x300M000\(mid).jpg"
+        }
         return Track(id: id, name: name, artists: singers,
                      album: AlbumRef(id: int(album?["id"]) ?? 0,
                                      name: album?["name"] as? String ?? "",
-                                     picUrl: album?["mid"] as? String),
+                                     picUrl: coverURL),
                      durationMS: (int(row["interval"]) ?? 0) * 1000,
                      source: "tx",
                      sourceMetadata: ["songmid": row["songmid"] as? String ?? "",

@@ -9,6 +9,7 @@ struct LocalPlaylistsView: View {
     @State private var showImport = false
     @State private var showQQLogin = false
     @State private var showQQWebLogin = false
+    @State private var showNeteaseWebLogin = false
     @State private var showCreate = false
     @State private var newName = ""
     @State private var onlineErrorMessage: String?
@@ -89,7 +90,7 @@ struct LocalPlaylistsView: View {
                 VStack(spacing: 10) {
                     Text("登录后查看和管理网易云个人歌单")
                         .foregroundStyle(.secondary)
-                    Button("登录网易云音乐", action: openLogin)
+                    Button("网页登录网易云音乐") { showNeteaseWebLogin = true }
                         .buttonStyle(.borderedProminent)
                 }
                 .frame(maxWidth: .infinity, minHeight: 120)
@@ -225,6 +226,7 @@ struct LocalPlaylistsView: View {
         }
         .sheet(isPresented: $showQQLogin) { QQCookieSheet() }
         .sheet(isPresented: $showQQWebLogin) { QQLoginSheet() }
+        .sheet(isPresented: $showNeteaseWebLogin) { NeteaseWebLoginSheet() }
     }
 
     private func refreshOnlinePlaylists() async {
