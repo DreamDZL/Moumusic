@@ -388,8 +388,9 @@ private struct PlaylistSectionDropDelegate: DropDelegate {
         }
     }
 
-    func performDrop(info: DropInfo) {
+    func performDrop(info: DropInfo) -> Bool {
         PlaylistSectionOrder.save(order)
+        return true
     }
 }
 
