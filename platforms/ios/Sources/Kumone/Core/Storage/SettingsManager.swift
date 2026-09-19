@@ -147,6 +147,7 @@ final class SettingsManager: ObservableObject {
     private enum Keys {
         static let quality = "settings.audioQuality"
         static let appearance = "settings.appearance"
+        static let themeColor = "settings.themeColor"
         #if os(iOS)
         static let nowPlayingMode = "settings.nowPlayingMode"
         #endif
@@ -172,6 +173,10 @@ final class SettingsManager: ObservableObject {
 
     @Published var appearance: AppAppearance {
         didSet { UserDefaults.standard.set(appearance.rawValue, forKey: Keys.appearance) }
+    }
+
+    @Published var themeColor: AppThemeColor {
+        didSet { UserDefaults.standard.set(themeColor.rawValue, forKey: Keys.themeColor) }
     }
 
     #if os(iOS)
@@ -252,6 +257,8 @@ final class SettingsManager: ObservableObject {
         let defaults = UserDefaults.standard
         audioQuality = defaults.string(forKey: Keys.quality).flatMap(AudioQuality.init(rawValue:)) ?? .exhigh
         appearance = defaults.string(forKey: Keys.appearance).flatMap(AppAppearance.init) ?? .auto
+        themeColor = defaults.string(forKey: Keys.themeColor)
+            .flatMap(AppThemeColor.init) ?? .defaultValue
         #if os(iOS)
         nowPlayingMode = defaults.string(forKey: Keys.nowPlayingMode).flatMap(NowPlayingMode.init) ?? .immersive
         #endif

@@ -345,9 +345,9 @@ struct HomeView: View {
                         .frame(minHeight: 44)
                     }
                 }
-                .padding(.horizontal, Theme.Layout.contentInset)
             }
         }
+        .padding(.horizontal, Theme.Layout.contentInset)
         .padding(.top, 4)
     }
 

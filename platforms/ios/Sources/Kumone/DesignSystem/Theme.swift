@@ -2,14 +2,19 @@ import SwiftUI
 
 /// Design tokens: color, radius, spacing, layout metrics.
 enum Theme {
-    /// NetEase red, tuned slightly warmer for macOS.
-    static let accent = Color(red: 0.925, green: 0.286, blue: 0.286) // #EC4949
-    static let accentDeep = Color(red: 0.788, green: 0.161, blue: 0.161) // #C92929
+    /// The selected accent is persisted by SettingsManager. Reading it here
+    /// keeps existing Theme.accent call sites in sync when the user changes
+    /// the setting without requiring a broad view-by-view refactor.
+    static var accent: Color { AppThemeColor.current.color }
+    static var accentDeep: Color { AppThemeColor.current.deepColor }
 
-    static let accentGradient = LinearGradient(
-        colors: [Color(red: 0.973, green: 0.357, blue: 0.357), accentDeep],
-        startPoint: .topLeading, endPoint: .bottomTrailing
-    )
+    static var accentGradient: LinearGradient {
+        let theme = AppThemeColor.current
+        return LinearGradient(
+            colors: [theme.gradientStart, theme.deepColor],
+            startPoint: .topLeading, endPoint: .bottomTrailing
+        )
+    }
 
     enum Radius {
         static let badge: CGFloat = 4
@@ -50,6 +55,65 @@ enum Theme {
         static let minWindowHeight: CGFloat = 640
         static let defaultWindowWidth: CGFloat = 1200
         static let defaultWindowHeight: CGFloat = 780
+    }
+}
+
+enum AppThemeColor: String, CaseIterable, Identifiable {
+    case blue
+    case red
+    case purple
+    case green
+    case orange
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .blue: return String(localized: "蓝色")
+        case .red: return String(localized: "红色")
+        case .purple: return String(localized: "紫色")
+        case .green: return String(localized: "绿色")
+        case .orange: return String(localized: "橙色")
+        }
+    }
+
+    /// The app's default theme. The blue value is intentionally kept as the
+    /// exact user-requested #05348B color.
+    static let defaultValue: Self = .blue
+
+    static var current: Self {
+        UserDefaults.standard.string(forKey: "settings.themeColor")
+            .flatMap(Self.init(rawValue:)) ?? defaultValue
+    }
+
+    var color: Color {
+        switch self {
+        case .blue: return Color(red: 5 / 255, green: 52 / 255, blue: 139 / 255)
+        case .red: return Color(red: 236 / 255, green: 73 / 255, blue: 73 / 255)
+        case .purple: return Color(red: 124 / 255, green: 58 / 255, blue: 237 / 255)
+        case .green: return Color(red: 22 / 255, green: 163 / 255, blue: 74 / 255)
+        case .orange: return Color(red: 234 / 255, green: 88 / 255, blue: 12 / 255)
+        }
+    }
+
+    var deepColor: Color {
+        switch self {
+        case .blue: return Color(red: 3 / 255, green: 29 / 255, blue: 83 / 255)
+        case .red: return Color(red: 201 / 255, green: 41 / 255, blue: 41 / 255)
+        case .purple: return Color(red: 91 / 255, green: 33 / 255, blue: 182 / 255)
+        case .green: return Color(red: 15 / 255, green: 108 / 255, blue: 48 / 255)
+        case .orange: return Color(red: 180 / 255, green: 50 / 255, blue: 8 / 255)
+        }
+    }
+
+    var gradientStart: Color {
+        switch self {
+        case .blue: return Color(red: 28 / 255, green: 83 / 255, blue: 177 / 255)
+        case .red: return Color(red: 248 / 255, green: 91 / 255, blue: 91 / 255)
+        case .purple: return Color(red: 167 / 255, green: 109 / 255, blue: 255 / 255)
+        case .green: return Color(red: 74 / 255, green: 196 / 255, blue: 111 / 255)
+        case .orange: return Color(red: 255 / 255, green: 145 / 255, blue: 61 / 255)
+        }
     }
 }
 

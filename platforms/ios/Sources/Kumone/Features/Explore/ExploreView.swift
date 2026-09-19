@@ -222,9 +222,9 @@ struct ExploreView: View {
                         .frame(minHeight: 44)
                     }
                 }
-                .padding(.horizontal, Theme.Layout.contentInset)
             }
         }
+        .padding(.horizontal, Theme.Layout.contentInset)
     }
 
     private var categoryChips: some View {

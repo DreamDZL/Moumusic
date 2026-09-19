@@ -91,6 +91,17 @@ struct SettingsView: View {
                         Text(annotation.displayName).tag(annotation)
                     }
                 }
+                Picker("主题色", selection: $settings.themeColor) {
+                    ForEach(AppThemeColor.allCases) { themeColor in
+                        HStack {
+                            Circle()
+                                .fill(themeColor.color)
+                                .frame(width: 14, height: 14)
+                            Text(themeColor.displayName)
+                        }
+                        .tag(themeColor)
+                    }
+                }
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Text("歌词同步")
