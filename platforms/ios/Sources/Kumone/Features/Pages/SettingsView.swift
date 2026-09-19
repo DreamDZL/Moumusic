@@ -3,13 +3,17 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var settings: SettingsManager
 #if os(iOS)
+    @EnvironmentObject private var account: AccountStore
     @EnvironmentObject private var player: PlayerService
     @StateObject private var lxStore = LXSourceStore.shared
+    @StateObject private var qqMusic = QQMusicAPI.shared
 #endif
     @State private var cacheSize = "计算中…"
 #if os(iOS)
     @State private var showSourceManager = false
     @State private var showDownloads = false
+    @State private var showNeteaseLogoutConfirmation = false
+    @State private var showQQLogoutConfirmation = false
 #endif
 
     var body: some View {
@@ -49,6 +53,21 @@ struct SettingsView: View {
                 Text("音源管理是独立页面：可导入文件或在线链接、切换当前音源，并测试 musicUrl 接口。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+#endif
+
+#if os(iOS)
+            Section("账号") {
+                accountRow(
+                    title: "网易云音乐",
+                    isLoggedIn: account.hasAuthCookie,
+                    logout: { showNeteaseLogoutConfirmation = true }
+                )
+                accountRow(
+                    title: "QQ 音乐",
+                    isLoggedIn: qqMusic.isLoggedIn,
+                    logout: { showQQLogoutConfirmation = true }
+                )
             }
 #endif
 
@@ -144,8 +163,39 @@ struct SettingsView: View {
             DownloadsView()
                 .environmentObject(player)
         }
+        .confirmationDialog("退出网易云音乐？", isPresented: $showNeteaseLogoutConfirmation, titleVisibility: .visible) {
+            Button("退出登录", role: .destructive) {
+                Task { await AccountStore.shared.logout() }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("将清除网易云账号登录状态和在线歌单缓存。")
+        }
+        .confirmationDialog("退出 QQ 音乐？", isPresented: $showQQLogoutConfirmation, titleVisibility: .visible) {
+            Button("退出登录", role: .destructive) {
+                QQMusicAPI.shared.logout()
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("将清除 QQ 音乐 Cookie 和在线歌单缓存。")
+        }
 #endif
     }
+
+#if os(iOS)
+    private func accountRow(title: String, isLoggedIn: Bool, logout: @escaping () -> Void) -> some View {
+        HStack {
+            Label(title, systemImage: "person.crop.circle")
+            Spacer()
+            if isLoggedIn {
+                Button("退出登录", role: .destructive, action: logout)
+            } else {
+                Text("未登录")
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+#endif
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"

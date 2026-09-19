@@ -5,7 +5,6 @@ struct LocalPlaylistsView: View {
     @StateObject private var store = LocalPlaylistStore.shared
     @EnvironmentObject private var account: AccountStore
     @StateObject private var qqMusic = QQMusicAPI.shared
-    @Environment(\.openLogin) private var openLogin
     @State private var showImport = false
     @State private var showQQLogin = false
     @State private var showQQWebLogin = false
@@ -13,14 +12,34 @@ struct LocalPlaylistsView: View {
     @State private var showCreate = false
     @State private var newName = ""
     @State private var onlineErrorMessage: String?
+    @State private var isReorderingSections = false
+    @State private var sectionOrder = PlaylistSectionOrder.load()
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                onlinePlaylistsSection
-                qqPlaylistsSection
-
-                localPlaylistsSection
+                ForEach(sectionOrder) { section in
+                    sectionView(section)
+                        .overlay {
+                            if isReorderingSections {
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .stroke(Theme.accent.opacity(0.35), lineWidth: 1)
+                                    .allowsHitTesting(false)
+                            }
+                        }
+                        .onDrag {
+                            guard isReorderingSections else { return NSItemProvider() }
+                            return NSItemProvider(object: section.rawValue as NSString)
+                        }
+                        .onDrop(
+                            of: [.text],
+                            delegate: PlaylistSectionDropDelegate(
+                                target: section,
+                                order: $sectionOrder,
+                                isEnabled: $isReorderingSections
+                            )
+                        )
+                }
             }
             .padding(.vertical, 14)
             PlayerClearanceSpacer()
@@ -28,6 +47,16 @@ struct LocalPlaylistsView: View {
         .navigationTitle("歌单")
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
+                Button {
+                    withAnimation(AppAnimation.standard) {
+                        isReorderingSections.toggle()
+                    }
+                } label: {
+                    Label(
+                        isReorderingSections ? "完成排序" : "排序",
+                        systemImage: isReorderingSections ? "checkmark" : "arrow.up.arrow.down"
+                    )
+                }
                 Button {
                     showImport = true
                 } label: {
@@ -64,6 +93,15 @@ struct LocalPlaylistsView: View {
             Button("确定", role: .cancel) { onlineErrorMessage = nil }
         } message: {
             Text(onlineErrorMessage ?? "")
+        }
+    }
+
+    @ViewBuilder
+    private func sectionView(_ section: PlaylistSection) -> some View {
+        switch section {
+        case .netease: onlinePlaylistsSection
+        case .qq: qqPlaylistsSection
+        case .local: localPlaylistsSection
         }
     }
 
@@ -171,13 +209,7 @@ struct LocalPlaylistsView: View {
                 Spacer()
                 if qqMusic.isLoggedIn {
                     Button {
-                        Task {
-                            do {
-                                try await qqMusic.refreshPlaylists()
-                            } catch {
-                                onlineErrorMessage = error.localizedDescription
-                            }
-                        }
+                        Task { await refreshQQPlaylists() }
                     } label: {
                         Image(systemName: "arrow.clockwise")
                     }
@@ -217,11 +249,7 @@ struct LocalPlaylistsView: View {
         .padding(.horizontal, Theme.Layout.contentInset)
         .task {
             if qqMusic.isLoggedIn {
-                do {
-                    try await qqMusic.refreshPlaylists()
-                } catch {
-                    onlineErrorMessage = error.localizedDescription
-                }
+                await refreshQQPlaylists()
             }
         }
         .sheet(isPresented: $showQQLogin) { QQCookieSheet() }
@@ -230,11 +258,27 @@ struct LocalPlaylistsView: View {
     }
 
     private func refreshOnlinePlaylists() async {
-        await account.refreshLibrary()
-        guard qqMusic.isLoggedIn else { return }
         do {
+            try await account.refreshLibraryThrowing()
+            try Task.checkCancellation()
+            guard qqMusic.isLoggedIn else { return }
             try await qqMusic.refreshPlaylists()
+        } catch is CancellationError {
+            return
         } catch {
+            guard !Task.isCancelled else { return }
+            onlineErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func refreshQQPlaylists() async {
+        do {
+            try Task.checkCancellation()
+            try await qqMusic.refreshPlaylists()
+        } catch is CancellationError {
+            return
+        } catch {
+            guard !Task.isCancelled else { return }
             onlineErrorMessage = error.localizedDescription
         }
     }
@@ -314,6 +358,38 @@ struct LocalPlaylistsView: View {
         .padding(12)
         .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .contentShape(Rectangle())
+    }
+}
+
+private struct PlaylistSectionDropDelegate: DropDelegate {
+    let target: PlaylistSection
+    @Binding var order: [PlaylistSection]
+    @Binding var isEnabled: Bool
+
+    func dropEntered(info: DropInfo) {
+        guard isEnabled,
+              let provider = info.itemProviders(for: [.text]).first,
+              let targetIndex = order.firstIndex(of: target) else { return }
+
+        provider.loadObject(ofClass: NSString.self) { object, _ in
+            guard let value = object as? NSString,
+                  let source = PlaylistSection(rawValue: value as String),
+                  source != target else { return }
+            DispatchQueue.main.async {
+                guard let sourceIndex = order.firstIndex(of: source), sourceIndex != targetIndex else { return }
+                withAnimation(AppAnimation.quick) {
+                    order.move(
+                        fromOffsets: IndexSet(integer: sourceIndex),
+                        toOffset: targetIndex + (sourceIndex < targetIndex ? 1 : 0)
+                    )
+                }
+                PlaylistSectionOrder.save(order)
+            }
+        }
+    }
+
+    func performDrop(info: DropInfo) {
+        PlaylistSectionOrder.save(order)
     }
 }
 

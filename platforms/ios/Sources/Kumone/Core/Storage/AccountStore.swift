@@ -56,11 +56,22 @@ final class AccountStore: ObservableObject {
     func refreshLibrary() async {
         guard let userID = profile?.userId else { return }
         do {
-            userPlaylists = try await NeteaseAPI.userPlaylists(uid: userID)
-            likedTrackIDs = Set(try await NeteaseAPI.likedTrackIDs(uid: userID))
+            try await refreshLibraryThrowing()
         } catch {
+            guard !Task.isCancelled else { return }
             ToastCenter.shared.show(error.localizedDescription)
         }
+    }
+
+    func refreshLibraryThrowing() async throws {
+        guard let userID = profile?.userId else { return }
+        try Task.checkCancellation()
+        let playlists = try await NeteaseAPI.userPlaylists(uid: userID)
+        try Task.checkCancellation()
+        let likedIDs = try await NeteaseAPI.likedTrackIDs(uid: userID)
+        try Task.checkCancellation()
+        userPlaylists = playlists
+        likedTrackIDs = Set(likedIDs)
     }
 
     func refreshSublists() async {
