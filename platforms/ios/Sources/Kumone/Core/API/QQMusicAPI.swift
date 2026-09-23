@@ -177,8 +177,13 @@ final class QQMusicAPI: ObservableObject {
             ?? Self.cookieValue("p_skey", in: cookie)
             ?? Self.cookieValue("skey", in: cookie)
             ?? ""
+        // QQ's web CGI derives g_tk from the SSO CSRF cookie. qqmusic_key is
+        // the authentication ticket (authst), not the preferred hash source.
+        let csrfTicket = Self.cookieValue("p_skey", in: cookie)
+            ?? Self.cookieValue("skey", in: cookie)
+            ?? ticket
         let uin = Self.numericUIN(cookie) ?? "0"
-        let gtk = Self.hash33(ticket)
+        let gtk = Self.hash33(csrfTicket)
         return [
             "ct": 24,
             "cv": 4747474,
