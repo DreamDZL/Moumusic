@@ -4,6 +4,7 @@ import SwiftUI
 public struct IOSMainWindow: View {
     @StateObject private var player = PlayerService.shared
     @StateObject private var account = AccountStore.shared
+    @StateObject private var qqMusic = QQMusicAPI.shared
     @StateObject private var settings = SettingsManager.shared
     @StateObject private var toasts = ToastCenter.shared
     @StateObject private var updater = IOSUpdater.shared
@@ -45,6 +46,9 @@ public struct IOSMainWindow: View {
                 // still keeps all runtime setup on the main actor.
                 await Task.yield()
                 player.startRuntime()
+                if qqMusic.isLoggedIn {
+                    Task { try? await qqMusic.refreshPlaylists() }
+                }
                 if settings.autoCheckUpdates {
                     IOSUpdater.shared.check(interactive: false)
                 }

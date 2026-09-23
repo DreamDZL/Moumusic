@@ -124,7 +124,11 @@ final class QQMusicAPI: ObservableObject {
             ],
         ]
         let root = try await request(payload)
-        try Self.requireSuccess(root)
+        if Self.responseCode(root) == 1000 {
+            try await legacyRemove(track, from: playlist, cookie: cookie)
+        } else {
+            try Self.requireSuccess(root)
+        }
     }
 
     func add(_ track: Track, to playlist: Playlist) async throws {
@@ -143,20 +147,27 @@ final class QQMusicAPI: ObservableObject {
                 ],
             ],
         ]
-        try Self.requireSuccess(try await request(payload))
+        let root = try await request(payload)
+        if Self.responseCode(root) == 1000 {
+            try await legacyAdd(track, to: playlist, cookie: cookie)
+        } else {
+            try Self.requireSuccess(root)
+        }
     }
 
     enum QQMusicError: LocalizedError {
         case notLoggedIn
         case invalidResponse
         case requestFailed
+        case missingQQSongID
         case operationRejected(Int)
 
         var errorDescription: String? {
             switch self {
-            case .notLoggedIn: return "请先登录 QQ 音乐"
+            case .notLoggedIn: return "QQ 音乐登录状态已失效，请重新登录后再操作"
             case .invalidResponse: return "QQ 音乐返回了无法识别的数据"
             case .requestFailed: return "QQ 音乐请求失败，请重新登录后重试"
+            case .missingQQSongID: return "无法读取这首歌的 QQ 音乐标识，请重新搜索后添加"
             case .operationRejected(let code):
                 return "QQ 音乐未接受此次歌单操作（错误码：\(code)），请确认目标歌单可编辑后重试"
             }
@@ -198,6 +209,70 @@ final class QQMusicAPI: ObservableObject {
             "notice": 0,
             "need_new_code": 1,
         ]
+    }
+
+    /// QQ's legacy web CGI remains the fallback used by existing QQ Music
+    /// integrations when the musicu write endpoint rejects a valid web login.
+    private func legacyAdd(_ track: Track, to playlist: Playlist, cookie: String) async throws {
+        guard let songMid = track.sourceMetadata["songmid"], !songMid.isEmpty else {
+            throw QQMusicError.missingQQSongID
+        }
+        let root = try await legacyPlaylistRequest(cookie: cookie, playlist: playlist, query: [
+            URLQueryItem(name: "midlist", value: songMid),
+            URLQueryItem(name: "typelist", value: "13"),
+            URLQueryItem(name: "dirid", value: String(playlist.dirID)),
+            URLQueryItem(name: "addtype", value: ""),
+            URLQueryItem(name: "formsender", value: "4"),
+            URLQueryItem(name: "r2", value: "0"),
+            URLQueryItem(name: "r3", value: "1"),
+            URLQueryItem(name: "utf8", value: "1"),
+            URLQueryItem(name: "g_tk", value: "5381"),
+        ], endpoint: "https://c.y.qq.com/splcloud/fcgi-bin/fcg_music_add2songdir.fcg")
+        try Self.requireLegacySuccess(root)
+    }
+
+    private func legacyRemove(_ track: Track, from playlist: Playlist, cookie: String) async throws {
+        let uin = Self.cookieValue("uin", in: cookie) ?? Self.numericUIN(cookie) ?? "0"
+        let root = try await legacyPlaylistRequest(cookie: cookie, playlist: playlist, query: [
+            URLQueryItem(name: "loginUin", value: uin),
+            URLQueryItem(name: "hostUin", value: "0"),
+            URLQueryItem(name: "format", value: "json"),
+            URLQueryItem(name: "inCharset", value: "utf8"),
+            URLQueryItem(name: "outCharset", value: "utf-8"),
+            URLQueryItem(name: "notice", value: "0"),
+            URLQueryItem(name: "platform", value: "yqq.post"),
+            URLQueryItem(name: "needNewCode", value: "0"),
+            URLQueryItem(name: "uin", value: uin),
+            URLQueryItem(name: "dirid", value: String(playlist.dirID)),
+            URLQueryItem(name: "ids", value: String(sourceSongID(track))),
+            URLQueryItem(name: "source", value: "103"),
+            URLQueryItem(name: "types", value: "3"),
+            URLQueryItem(name: "formsender", value: "4"),
+            URLQueryItem(name: "flag", value: "2"),
+            URLQueryItem(name: "utf8", value: "1"),
+            URLQueryItem(name: "from", value: "3"),
+            URLQueryItem(name: "g_tk", value: "5381"),
+        ], endpoint: "https://c.y.qq.com/qzone/fcgi-bin/fcg_music_delbatchsong.fcg")
+        try Self.requireLegacySuccess(root)
+    }
+
+    private func legacyPlaylistRequest(cookie: String, playlist: Playlist,
+                                       query: [URLQueryItem], endpoint: String) async throws -> [String: Any] {
+        var components = URLComponents(string: endpoint)!
+        components.queryItems = query
+        guard let url = components.url else { throw QQMusicError.requestFailed }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue(cookie, forHTTPHeaderField: "Cookie")
+        request.setValue("https://y.qq.com", forHTTPHeaderField: "Origin")
+        request.setValue("https://y.qq.com/n/ryqq/playlist/\(playlist.id)", forHTTPHeaderField: "Referer")
+        request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15", forHTTPHeaderField: "User-Agent")
+        let (body, response) = try await session.data(for: request)
+        guard (response as? HTTPURLResponse)?.statusCode == 200,
+              let root = try JSONSerialization.jsonObject(with: body) as? [String: Any] else {
+            throw QQMusicError.requestFailed
+        }
+        return root
     }
 
     private static func numericUIN(_ cookie: String) -> String? {
@@ -254,6 +329,20 @@ final class QQMusicAPI: ObservableObject {
         if let code = codes.first(where: { $0 != 0 }) {
             throw QQMusicError.operationRejected(code)
         }
+    }
+
+    private static func responseCode(_ root: [String: Any]) -> Int? {
+        let requestResult = root["req_0"] as? [String: Any]
+        let data = requestResult?["data"] as? [String: Any]
+        return [data?["retCode"], requestResult?["code"], requestResult?["ret"], root["code"]]
+            .compactMap(int).first(where: { $0 != 0 })
+    }
+
+    private static func requireLegacySuccess(_ root: [String: Any]) throws {
+        guard let code = int(root["code"]) else { throw QQMusicError.invalidResponse }
+        if code == 0 { return }
+        if code == 1000 { throw QQMusicError.notLoggedIn }
+        throw QQMusicError.operationRejected(code)
     }
 
     private static func playlist(from row: [String: Any]) -> Playlist? {
