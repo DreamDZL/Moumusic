@@ -109,9 +109,9 @@ final class QQMusicAPI: ObservableObject {
 
     func remove(_ track: Track, from playlist: Playlist) async throws {
         guard let cookie else { throw QQMusicError.notLoggedIn }
-        let songID = Int(track.sourceMetadata["songId"] ?? "") ?? track.id
+        let songID = sourceSongID(track)
         let payload: [String: Any] = [
-            "comm": ["ct": 24, "cv": 1800],
+            "comm": authenticatedWebComm(cookie),
             "req_0": [
                 "module": "music.musicasset.PlaylistDetailWrite",
                 "method": "DelSonglist",
@@ -119,20 +119,19 @@ final class QQMusicAPI: ObservableObject {
                     "dirId": playlist.dirID,
                     "tid": playlist.id,
                     "bFmtUtf8": true,
-                    "v_songInfo": [["songId": songID, "songType": 13]],
+                    "v_songInfo": [["songId": songID, "songType": songType(track)]],
                 ],
             ],
         ]
-        _ = cookie
         let root = try await request(payload)
         try Self.requireSuccess(root)
     }
 
     func add(_ track: Track, to playlist: Playlist) async throws {
         guard let cookie else { throw QQMusicError.notLoggedIn }
-        let songID = Int(track.sourceMetadata["songId"] ?? "") ?? track.id
+        let songID = sourceSongID(track)
         let payload: [String: Any] = [
-            "comm": ["ct": 24, "cv": 1800],
+            "comm": authenticatedWebComm(cookie),
             "req_0": [
                 "module": "music.musicasset.PlaylistDetailWrite",
                 "method": "AddSonglist",
@@ -140,11 +139,10 @@ final class QQMusicAPI: ObservableObject {
                     "dirId": playlist.dirID,
                     "tid": playlist.id,
                     "bFmtUtf8": true,
-                    "v_songInfo": [["songId": songID, "songType": 13]],
+                    "v_songInfo": [["songId": songID, "songType": songType(track)]],
                 ],
             ],
         ]
-        _ = cookie
         try Self.requireSuccess(try await request(payload))
     }
 
@@ -152,13 +150,72 @@ final class QQMusicAPI: ObservableObject {
         case notLoggedIn
         case invalidResponse
         case requestFailed
+        case operationRejected(Int)
 
         var errorDescription: String? {
             switch self {
             case .notLoggedIn: return "请先登录 QQ 音乐"
             case .invalidResponse: return "QQ 音乐返回了无法识别的数据"
             case .requestFailed: return "QQ 音乐请求失败，请重新登录后重试"
+            case .operationRejected(let code):
+                return "QQ 音乐未接受此次歌单操作（错误码：\(code)），请确认目标歌单可编辑后重试"
             }
+        }
+    }
+
+    private func sourceSongID(_ track: Track) -> Int {
+        Int(track.sourceMetadata["songId"] ?? track.sourceMetadata["id"] ?? "") ?? track.id
+    }
+
+    private func songType(_ track: Track) -> Int {
+        Int(track.sourceMetadata["songType"] ?? track.sourceMetadata["song_type"] ?? "") ?? 13
+    }
+
+    private func authenticatedWebComm(_ cookie: String) -> [String: Any] {
+        let ticket = Self.cookieValue("qqmusic_key", in: cookie)
+            ?? Self.cookieValue("qm_keyst", in: cookie)
+            ?? Self.cookieValue("p_skey", in: cookie)
+            ?? Self.cookieValue("skey", in: cookie)
+            ?? ""
+        let uin = Self.numericUIN(cookie) ?? "0"
+        let gtk = Self.hash33(ticket)
+        return [
+            "ct": 24,
+            "cv": 4747474,
+            "platform": "yqq.json",
+            "uin": uin,
+            "authst": ticket,
+            "g_tk": gtk,
+            "g_tk_new_20200303": gtk,
+            "format": "json",
+            "inCharset": "utf-8",
+            "outCharset": "utf-8",
+            "notice": 0,
+            "need_new_code": 1,
+        ]
+    }
+
+    private static func numericUIN(_ cookie: String) -> String? {
+        for key in ["wxuin", "qqmusic_uin", "uin", "ied_qq"] {
+            guard let value = cookieValue(key, in: cookie) else { continue }
+            let digits = value.hasPrefix("o") ? String(value.dropFirst()) : value
+            if !digits.isEmpty, digits.allSatisfy(\.isNumber) { return digits }
+        }
+        return nil
+    }
+
+    private static func cookieValue(_ key: String, in cookie: String) -> String? {
+        cookie.split(separator: ";").lazy.compactMap { part -> String? in
+            let pair = part.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+            guard pair.count == 2,
+                  pair[0].trimmingCharacters(in: .whitespaces) == key else { return nil }
+            return pair[1].trimmingCharacters(in: .whitespaces)
+        }.first
+    }
+
+    private static func hash33(_ value: String) -> Int {
+        value.utf16.reduce(5381) { hash, character in
+            ((hash << 5) &+ hash &+ Int(character)) & 0x7fffffff
         }
     }
 
@@ -184,8 +241,14 @@ final class QQMusicAPI: ObservableObject {
     }
 
     private static func requireSuccess(_ root: [String: Any]) throws {
-        let response = ((root["req_0"] as? [String: Any])?["data"] as? [String: Any])
-        guard let code = response?["retCode"] as? Int, code == 0 else { throw QQMusicError.requestFailed }
+        let requestResult = root["req_0"] as? [String: Any]
+        let data = requestResult?["data"] as? [String: Any]
+        let codes = [root["code"], requestResult?["code"], requestResult?["ret"], data?["retCode"]]
+            .compactMap { int($0) }
+        guard !codes.isEmpty else { throw QQMusicError.invalidResponse }
+        if let code = codes.first(where: { $0 != 0 }) {
+            throw QQMusicError.operationRejected(code)
+        }
     }
 
     private static func playlist(from row: [String: Any]) -> Playlist? {
@@ -218,7 +281,8 @@ final class QQMusicAPI: ObservableObject {
                      durationMS: (int(row["interval"]) ?? 0) * 1000,
                      source: "tx",
                      sourceMetadata: ["songmid": row["songmid"] as? String ?? "",
-                                      "songId": String(id)])
+                                      "songId": String(id),
+                                      "songType": String(int(row["type"] ?? row["songType"]) ?? 13)])
     }
 
     private static func int(_ value: Any?) -> Int? {

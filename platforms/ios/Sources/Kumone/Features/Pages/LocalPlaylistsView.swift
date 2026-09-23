@@ -14,31 +14,13 @@ struct LocalPlaylistsView: View {
     @State private var onlineErrorMessage: String?
     @State private var isReorderingSections = false
     @State private var sectionOrder = PlaylistSectionOrder.load()
+    @State private var draggedSection: PlaylistSection?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 ForEach(sectionOrder) { section in
-                    sectionView(section)
-                        .overlay {
-                            if isReorderingSections {
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .stroke(Theme.accent.opacity(0.35), lineWidth: 1)
-                                    .allowsHitTesting(false)
-                            }
-                        }
-                        .onDrag {
-                            guard isReorderingSections else { return NSItemProvider() }
-                            return NSItemProvider(object: section.rawValue as NSString)
-                        }
-                        .onDrop(
-                            of: [.text],
-                            delegate: PlaylistSectionDropDelegate(
-                                target: section,
-                                order: $sectionOrder,
-                                isEnabled: $isReorderingSections
-                            )
-                        )
+                    sectionCard(section)
                 }
             }
             .padding(.vertical, 14)
@@ -51,6 +33,8 @@ struct LocalPlaylistsView: View {
                     withAnimation(AppAnimation.standard) {
                         isReorderingSections.toggle()
                     }
+                    draggedSection = nil
+                    PlaylistSectionOrder.save(sectionOrder)
                 } label: {
                     Label(
                         isReorderingSections ? "完成排序" : "排序",
@@ -103,6 +87,66 @@ struct LocalPlaylistsView: View {
         case .qq: qqPlaylistsSection
         case .local: localPlaylistsSection
         }
+    }
+
+    @ViewBuilder
+    private func sectionCard(_ section: PlaylistSection) -> some View {
+        if isReorderingSections {
+            sectionView(section)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(Theme.accent.opacity(0.35), lineWidth: 1)
+                        .allowsHitTesting(false)
+                }
+                .overlay(alignment: .topTrailing) {
+                    HStack(spacing: 6) {
+                        Button {
+                            moveSection(section, by: -1)
+                        } label: {
+                            Image(systemName: "arrow.up")
+                                .frame(width: 36, height: 36)
+                        }
+                        .disabled(sectionOrder.first == section)
+                        .accessibilityLabel("上移\(section.displayName)")
+
+                        Button {
+                            moveSection(section, by: 1)
+                        } label: {
+                            Image(systemName: "arrow.down")
+                                .frame(width: 36, height: 36)
+                        }
+                        .disabled(sectionOrder.last == section)
+                        .accessibilityLabel("下移\(section.displayName)")
+                    }
+                    .buttonStyle(.bordered)
+                    .padding(8)
+                }
+                .onDrag {
+                    draggedSection = section
+                    return NSItemProvider(object: section.rawValue as NSString)
+                }
+                .onDrop(
+                    of: [.text],
+                    delegate: PlaylistSectionDropDelegate(
+                        target: section,
+                        order: $sectionOrder,
+                        draggedSection: $draggedSection,
+                        isEnabled: $isReorderingSections
+                    )
+                )
+        } else {
+            sectionView(section)
+        }
+    }
+
+    private func moveSection(_ section: PlaylistSection, by offset: Int) {
+        guard let index = sectionOrder.firstIndex(of: section) else { return }
+        let destination = index + offset
+        guard sectionOrder.indices.contains(destination) else { return }
+        withAnimation(AppAnimation.quick) {
+            sectionOrder.swapAt(index, destination)
+        }
+        PlaylistSectionOrder.save(sectionOrder)
     }
 
     private var onlinePlaylistsSection: some View {
@@ -364,33 +408,32 @@ struct LocalPlaylistsView: View {
 private struct PlaylistSectionDropDelegate: DropDelegate {
     let target: PlaylistSection
     @Binding var order: [PlaylistSection]
+    @Binding var draggedSection: PlaylistSection?
     @Binding var isEnabled: Bool
 
     func dropEntered(info: DropInfo) {
         guard isEnabled,
-              let provider = info.itemProviders(for: [.text]).first,
+              let source = draggedSection,
+              source != target,
+              let sourceIndex = order.firstIndex(of: source),
               let targetIndex = order.firstIndex(of: target) else { return }
-
-        provider.loadObject(ofClass: NSString.self) { object, _ in
-            guard let value = object as? NSString,
-                  let source = PlaylistSection(rawValue: value as String),
-                  source != target else { return }
-            DispatchQueue.main.async {
-                guard let sourceIndex = order.firstIndex(of: source), sourceIndex != targetIndex else { return }
-                withAnimation(AppAnimation.quick) {
-                    order.move(
-                        fromOffsets: IndexSet(integer: sourceIndex),
-                        toOffset: targetIndex + (sourceIndex < targetIndex ? 1 : 0)
-                    )
-                }
-                PlaylistSectionOrder.save(order)
-            }
+        withAnimation(AppAnimation.quick) {
+            order.move(
+                fromOffsets: IndexSet(integer: sourceIndex),
+                toOffset: targetIndex + (sourceIndex < targetIndex ? 1 : 0)
+            )
         }
+        PlaylistSectionOrder.save(order)
     }
 
     func performDrop(info: DropInfo) -> Bool {
         PlaylistSectionOrder.save(order)
+        draggedSection = nil
         return true
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
     }
 }
 

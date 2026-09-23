@@ -7,6 +7,14 @@ enum PlaylistSection: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    var displayName: String {
+        switch self {
+        case .netease: return "网易云音乐"
+        case .qq: return "QQ音乐"
+        case .local: return "本地歌单"
+        }
+    }
+
 }
 
 struct PlaylistSectionOrder {
