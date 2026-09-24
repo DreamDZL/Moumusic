@@ -474,7 +474,7 @@ enum LXCatalogService {
             let image = albumMid.isEmpty ? nil : "https://y.gtimg.cn/music/photo_new/T002R500x500M000\(albumMid).jpg"
             var metadata = ["songmid": firstText(item["mid"], item["songmid"], mediaMid) ?? String(id),
                             "id": String(id),
-                            "songType": firstText(item["songType"], item["song_type"], item["songtype"], item["type"]) ?? "13",
+                            "songType": firstText(item["songType"], item["song_type"], item["songtype"], item["type"]) ?? "0",
                             "strMediaMid": mediaMid,
                             "albumMid": albumMid,
                             "albumId": albumMid]

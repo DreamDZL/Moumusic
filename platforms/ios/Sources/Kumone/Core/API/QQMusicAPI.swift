@@ -31,6 +31,7 @@ final class QQMusicAPI: ObservableObject {
 
     private let session: URLSession
     private let keychainKey = "moumusic.qqmusic.cookie"
+    private let playlistCacheKey = "moumusic.qqmusic.playlists"
     private var cookie: String?
 
     private init() {
@@ -38,6 +39,7 @@ final class QQMusicAPI: ObservableObject {
         configuration.timeoutIntervalForRequest = 20
         session = URLSession(configuration: configuration)
         cookie = Self.readKeychain(key: keychainKey)
+        playlists = Self.readCachedPlaylists(key: playlistCacheKey)
         isLoggedIn = Self.validCookie(cookie)
     }
 
@@ -50,6 +52,7 @@ final class QQMusicAPI: ObservableObject {
         } else {
             Self.deleteKeychain(key: keychainKey)
             playlists = []
+            Self.deleteCachedPlaylists(key: playlistCacheKey)
         }
     }
 
@@ -58,6 +61,7 @@ final class QQMusicAPI: ObservableObject {
         playlists = []
         isLoggedIn = false
         Self.deleteKeychain(key: keychainKey)
+        Self.deleteCachedPlaylists(key: playlistCacheKey)
     }
 
     func refreshPlaylists() async throws {
@@ -78,6 +82,7 @@ final class QQMusicAPI: ObservableObject {
         }
         playlists = rows.compactMap(Self.playlist(from:))
             .filter { $0.dirID != 202 && $0.dirID != 205 && $0.dirID != 206 }
+        Self.writeCachedPlaylists(playlists, key: playlistCacheKey)
     }
 
     func detail(_ playlist: Playlist, page: Int = 0, pageSize: Int = 100) async throws -> Detail {
@@ -124,7 +129,7 @@ final class QQMusicAPI: ObservableObject {
             ],
         ]
         let root = try await request(payload)
-        if Self.responseCode(root) == 1000 {
+        if Self.responseCode(root) != nil {
             try await legacyRemove(track, from: playlist, cookie: cookie)
         } else {
             try Self.requireSuccess(root)
@@ -148,7 +153,7 @@ final class QQMusicAPI: ObservableObject {
             ],
         ]
         let root = try await request(payload)
-        if Self.responseCode(root) == 1000 {
+        if Self.responseCode(root) != nil {
             try await legacyAdd(track, to: playlist, cookie: cookie)
         } else {
             try Self.requireSuccess(root)
@@ -179,7 +184,7 @@ final class QQMusicAPI: ObservableObject {
     }
 
     private func songType(_ track: Track) -> Int {
-        Int(track.sourceMetadata["songType"] ?? track.sourceMetadata["song_type"] ?? "") ?? 13
+        Int(track.sourceMetadata["songType"] ?? track.sourceMetadata["song_type"] ?? "") ?? 0
     }
 
     private func authenticatedWebComm(_ cookie: String) -> [String: Any] {
@@ -376,7 +381,7 @@ final class QQMusicAPI: ObservableObject {
                      source: "tx",
                      sourceMetadata: ["songmid": row["songmid"] as? String ?? "",
                                       "songId": String(id),
-                                      "songType": String(int(row["type"] ?? row["songType"]) ?? 13)])
+                                      "songType": String(int(row["type"] ?? row["songType"]) ?? 0)])
     }
 
     private static func int(_ value: Any?) -> Int? {
@@ -408,6 +413,21 @@ final class QQMusicAPI: ObservableObject {
         guard let cookie else { return false }
         return extractUIN(cookie) != nil
             && (cookie.contains("qqmusic_key") || cookie.contains("p_skey"))
+    }
+
+    private static func readCachedPlaylists(key: String) -> [Playlist] {
+        guard let data = UserDefaults.standard.data(forKey: key),
+              let cached = try? JSONDecoder().decode([Playlist].self, from: data) else { return [] }
+        return cached
+    }
+
+    private static func writeCachedPlaylists(_ playlists: [Playlist], key: String) {
+        guard let data = try? JSONEncoder().encode(playlists) else { return }
+        UserDefaults.standard.set(data, forKey: key)
+    }
+
+    private static func deleteCachedPlaylists(key: String) {
+        UserDefaults.standard.removeObject(forKey: key)
     }
 
     private static func query(_ key: String, _ service: String = "moumusic") -> [String: Any] {
